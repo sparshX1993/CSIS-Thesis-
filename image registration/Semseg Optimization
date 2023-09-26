@@ -1,0 +1,146 @@
+import numpy as np
+
+import random
+
+from numpy import asarray
+
+import h5py
+
+import matplotlib.pyplot as plt
+
+plt.rcParams['image.cmap'] = 'gray'
+plt.rcParams['image.interpolation'] = 'nearest'
+np.set_printoptions(precision=5,suppress=True)
+
+
+path_Semseg = 'C:/Users/bjqb7h/Downloads/Thesis2022/SEMSEGGPS'
+log  = '/AtCityBMW_Applanix-20220601T115459Z469'
+semsegpath ='C:/Users/bjqb7h/Downloads/Thesis2022/semsegimage'
+path_GPS = 'C:/Users/bjqb7h/Downloads/Thesis2022/NUMPY/New/'
+log_GPS  = 'AtCityBMW_Applanix-20220601T115459Z469DGPSWNS3'
+log_DGPS ='AtCityBMW_Applanix-20220601T115459Z469CalibDGPS'
+
+h5f = h5py.File(path_Semseg +log+'.h5','r')
+dset = h5f.get('grid_prediction')
+
+GPS = h5py.File(path_GPS+log_GPS+'.hdf5','r')
+GPSDSET = GPS.get(log+'/Image data')
+
+#Importing DGPS MAPS
+h5fDGPS = h5py.File(path_GPS+log_DGPS+'.hdf5','r')
+dset5 = h5fDGPS.get(log+'/Image data')
+
+A=len(dset5)
+SemsegData = np.reshape(dset,(A,160,160,2))
+
+
+
+T=random.randint(0,2093)
+
+#USING GPS HDF5 dATASET
+t1_slice = GPSDSET[T,:,:,1]
+# t1_set = np.flip(dset5[:,:,:,1],axis=1)
+t1_slice = np.flip(t1_slice, axis=1)
+GPS_data = t1_slice
+
+#Using SEMSEG HDF5 DIRECTLY
+#semseg_merged = np.max(SemsegData, axis=-1)
+t2_set = np.rot90(SemsegData[T,:,:,0],2)
+t2_slice_FREE = np.rot90(SemsegData[T,:,:,0],2)
+t2_slice_FREE = asarray(t2_slice_FREE,dtype=np.float64)
+t2_slice_occ = np.rot90(SemsegData[T,:,:,1],2)
+t2_slice_occ = asarray(t2_slice_occ,dtype=np.float64)
+Semseg_data = t2_slice_FREE
+
+
+# #DGPS values
+t3_slice = dset5[T,:,:,1]
+t3_slice = np.flip(t3_slice, axis=1)
+DGPS_data = t3_slice
+
+
+GPS_data = GPS_data/GPS_data.max()
+Semseg_data = Semseg_data/Semseg_data.max()
+DGPS_data= DGPS_data/DGPS_data.max()
+
+t2_slice_FREE = t2_slice_FREE/t2_slice_FREE.max()
+t2_slice_occ= t2_slice_occ/t2_slice_occ.max()
+# #Semseg_data
+# t1_set = t1_set/t1_set.max()
+# t2_set = t2_set/t2_set.max()#
+
+
+#plt.imshow(np.hstack((GPS_data, Semseg_data)))
+plt.imshow(np.hstack((t2_slice_FREE,t2_slice_occ,GPS_data)))
+
+# Define threshold ranges for free and occupied channels
+FREE_THRESHOLD_RANGE = (-0.971, 1.229)
+
+OCCUPIED_THRESHOLD_RANGE = (-3.223, 0.84)
+
+# Reshape prediction array to (num_frames, rows, cols, num_channels)
+prediction_data_reshaped = np.reshape(dset, (2093, 160, 160, 2))
+
+# Create empty image array
+image_data = np.zeros((2093, 160, 160, 3), dtype=np.float64)
+
+# Define colors
+FREE_COLOR = (0, 0, 0)
+OCCUPIED_COLOR = (255, 255, 255)
+gray_color = (128, 128, 128)
+
+# Loop through each pixel in each frame and classify as free, occupied or uncertain
+for frame_idx in range(2093):
+    for row_idx in range(160):
+        for col_idx in range(160):
+            free_prob = prediction_data_reshaped[frame_idx, row_idx, col_idx, 0]
+            occupied_prob = prediction_data_reshaped[frame_idx, row_idx, col_idx, 1]
+            # Check if the pixel is a white car (occupied pixel) on a black road (free pixel)
+            if free_prob < FREE_THRESHOLD_RANGE[0] and occupied_prob > OCCUPIED_THRESHOLD_RANGE[1]:
+                # Set the pixel to black color to match the color of the road
+                image_data[frame_idx, row_idx, col_idx] = FREE_COLOR
+            # Use threshold range to classify other pixels
+            elif occupied_prob > OCCUPIED_THRESHOLD_RANGE[1]:
+                image_data[frame_idx, row_idx, col_idx] = OCCUPIED_COLOR
+            elif free_prob < FREE_THRESHOLD_RANGE[0]:
+                image_data[frame_idx, row_idx, col_idx] = FREE_COLOR
+            elif free_prob > FREE_THRESHOLD_RANGE[1]:
+                image_data[frame_idx, row_idx, col_idx] = FREE_COLOR
+            elif occupied_prob < OCCUPIED_THRESHOLD_RANGE[0]:
+                image_data[frame_idx, row_idx, col_idx] = FREE_COLOR
+            else:
+                # Otherwise, set pixel to gray color to represent uncertainty
+                image_data[frame_idx, row_idx, col_idx] = gray_color
+
+T5=image_data[T,:,:,:]
+T5=np.rot90(T5,2)
+
+import matplotlib
+#matplotlib.use('TkAgg')
+
+# Create a new figure with a larger size
+fig = plt.figure(figsize=(10, 10))
+
+# Plot the four maps side by side
+plt.subplot(221)
+plt.imshow(t2_slice_FREE)
+plt.title('t2_slice_FREE')
+
+plt.subplot(222)
+plt.imshow(t2_slice_occ)
+plt.title('t2_slice_occ')
+
+plt.subplot(223)
+plt.imshow(GPS_data)
+plt.title('GPS_data')
+
+plt.subplot(224)
+plt.imshow(T5)
+plt.title('image_data')
+
+# Add a title to the figure
+plt.suptitle('Four Maps')
+
+# Show the figure
+plt.show()
+
